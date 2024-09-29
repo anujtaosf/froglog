@@ -15,7 +15,7 @@ app = App(token=os.getenv("Slack_Bot_Token"))
 user_kudos:dict[str, int] = {}
 user_given_kudos:dict[str, int] = {}
 # seconds between awarding kudos (1 week = 604800)
-time_between_kudos = 30 
+time_between_kudos = 20 
 
 # Your existing functions (slightly modified to use app.client instead of requests)
 def post_message_to_slack(channel, text, blocks=None):
@@ -52,8 +52,12 @@ def weekly_kudos_winner_to_slack(users_kudos:dict[str, int], channel="C07Q6AGELH
             max_user = user
     if not given:
         post_message_to_slack(channel=channel, text=f"Congratulations <@{max_user}> for recieving the most Kudos this week!")
+        for user in user_kudos:
+            user_kudos[user]=0
     else:
         post_message_to_slack(channel=channel, text=f"Congratulations <@{max_user}> for giving out the most Kudos this week!")
+        for user in user_given_kudos:
+            user_given_kudos[user]=0
 
 
 def add_points(points_dict:dict[str, int], user:str, points:int):
