@@ -117,20 +117,6 @@ def parse_slack_user(event):
 
     return mentioned_users
 
-def parse_slack_message_text(event):
-    blocks = event.get('blocks', [])
-    message_text = set()
-
-    for block in blocks:
-        if block['type'] == 'rich_text':
-            for element in block.get('elements', []):
-                if element['type'] == 'rich_text_section':
-                    for item in element.get('elements', []):
-                        if item['type'] == 'user':
-                            message_text.add(item['user_id'])
-
-    return message_text
-
 
 def check_kudos(event, message):
     text = event.get('text')
@@ -145,7 +131,7 @@ def check_kudos(event, message):
     {"role": "system", "content": "Please check if a message is positive and output a float"},
     {"role": "user", "content": text},
     ]
-    
+
     outputs = pipe(
         messages,
         max_new_tokens=256,
