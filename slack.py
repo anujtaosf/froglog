@@ -6,6 +6,9 @@ from slack_bolt import App
 from slack_bolt.adapter.socket_mode import SocketModeHandler
 from collections import defaultdict
 
+import torch
+from transformers import pipeline
+
 # Initialize the Slack app
 assert(os.getenv("Slack_Bot_Token") is not None)
 print(os.getenv("Slack_Bot_Token"))
@@ -100,7 +103,7 @@ def check_and_award_points():
 #     post_message_to_slack(channel, "New process kicked off!", start_block)
 
 # Event listener for messages
-def parse_slack_message(event):
+def parse_slack_user(event):
     blocks = event.get('blocks', [])
     mentioned_users = set()
 
@@ -113,6 +116,42 @@ def parse_slack_message(event):
                             mentioned_users.add(item['user_id'])
 
     return mentioned_users
+
+def parse_slack_message_text(event):
+    blocks = event.get('blocks', [])
+    message_text = set()
+
+    for block in blocks:
+        if block['type'] == 'rich_text':
+            for element in block.get('elements', []):
+                if element['type'] == 'rich_text_section':
+                    for item in element.get('elements', []):
+                        if item['type'] == 'user':
+                            message_text.add(item['user_id'])
+
+    return message_text
+
+
+def check_kudos(event, message):
+    text = event.get('text')
+    model_id = "meta-llama/Llama-3.2-1B-Instruct"
+    pipe = pipeline(
+    "text-generation",
+    model=model_id,
+    torch_dtype=torch.bfloat16,
+    device_map="auto",
+)
+    messages = [
+    {"role": "system", "content": "Please check if a message is positive and output a float"},
+    {"role": "user", "content": text},
+    ]
+    
+    outputs = pipe(
+        messages,
+        max_new_tokens=256,
+    )
+    print(outputs[0]["generated_text"][-1])
+
 
 @app.event("message")
 def handle_message(event, say):
@@ -130,10 +169,10 @@ def handle_message(event, say):
     # {'user': 'U07PELKA9AR', 'type': 'message', 'ts': '1727570796.123859', 'client_msg_id': '1e9b8d7f-f09c-4d72-9af7-54f157fe85fa', 'text': 'hello <@U07PL1TEGLC>', 'team': 'T07PW745R8R', 'blocks': [{'type': 'rich_text', 'block_id': 'lUvAn', 'elements': [{'type': 'rich_text_section', 'elements': [{'type': 'text', 'text': 'hello '}, {'type': 'user', 'user_id': 'U07PL1TEGLC'}]}]}], 'channel': 'C07Q6AGELHW', 'event_ts': '1727570796.123859', 'channel_type': 'channel'}
 
     # user_mention_pattern = re.compile(r'<@((?!channel|here)[A-Z0-9]+)>')
-    mentioned_users = parse_slack_message(event)
+    mentioned_users = parse_slack_user(event)
     for mentioned_user in mentioned_users:
         if mentioned_user != user:
-        # sends message in slack
+        # sends message in slac
             post_message_to_slack(channel, f"<@{user}> gave kudos to <@{mentioned_user}>")
             add_points(user_kudos, mentioned_user, 2)
             add_points(user_given_kudos, user, 1)
