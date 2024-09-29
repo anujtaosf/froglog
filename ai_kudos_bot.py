@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Initialize the Slack app
-app = App(token=os.environ.get("SLACK_BOT_TOKEN"))
+app = App(token=os.environ.get("Slack_Bot_Token"))
 
 # Initialize the kudos store
 kudos_store = {}
@@ -37,5 +37,5 @@ def handle_mention(event, say, client):
 
 if __name__ == "__main__":
     # Start the app using Socket Mode
-    handler = SocketModeHandler(app, os.environ.get("SLACK_APP_TOKEN"))
+    handler = SocketModeHandler(app, os.environ.get("Slack_App_Token"))
     handler.start()
