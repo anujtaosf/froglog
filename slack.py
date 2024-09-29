@@ -7,7 +7,7 @@ from slack_bolt.adapter.socket_mode import SocketModeHandler
 from collections import defaultdict
 
 import torch
-from transformers import pipeline
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, pipeline
 
 # Initialize the Slack app
 assert(os.getenv("Slack_Bot_Token") is not None)
@@ -18,7 +18,7 @@ app = App(token=os.getenv("Slack_Bot_Token"))
 user_kudos:dict[str, int] = {}
 user_given_kudos:dict[str, int] = {}
 # seconds between awarding kudos (1 week = 604800)
-time_between_kudos = 20 
+time_between_kudos = 300 
 
 # Your existing functions (slightly modified to use app.client instead of requests)
 def post_message_to_slack(channel, text, blocks=None):
@@ -53,14 +53,15 @@ def weekly_kudos_winner_to_slack(users_kudos:dict[str, int], channel="C07Q6AGELH
         if kudos_num > max_kudos:
             max_kudos = kudos_num
             max_user = user
-    if not given:
-        post_message_to_slack(channel=channel, text=f"Congratulations <@{max_user}> for recieving the most Kudos this week!")
-        for user in user_kudos:
-            user_kudos[user]=0
-    else:
-        post_message_to_slack(channel=channel, text=f"Congratulations <@{max_user}> for giving out the most Kudos this week!")
-        for user in user_given_kudos:
-            user_given_kudos[user]=0
+    if max_user is not None:
+        if not given:
+            post_message_to_slack(channel=channel, text=f"Congratulations <@{max_user}> for recieving the most Kudos this week!")
+            for user in user_kudos:
+                user_kudos[user]=0
+        else:
+            post_message_to_slack(channel=channel, text=f"Congratulations <@{max_user}> for giving out the most Kudos this week!")
+            for user in user_given_kudos:
+                user_given_kudos[user]=0
 
 
 def add_points(points_dict:dict[str, int], user:str, points:int):
@@ -118,25 +119,11 @@ def parse_slack_user(event):
     return mentioned_users
 
 
-def check_kudos(event, message):
+def check_kudos(event):
     text = event.get('text')
-    model_id = "meta-llama/Llama-3.2-1B-Instruct"
-    pipe = pipeline(
-    "text-generation",
-    model=model_id,
-    torch_dtype=torch.bfloat16,
-    device_map="auto",
-)
-    messages = [
-    {"role": "system", "content": "Please check if a message is positive and output a float"},
-    {"role": "user", "content": text},
-    ]
-
-    outputs = pipe(
-        messages,
-        max_new_tokens=256,
-    )
-    print(outputs[0]["generated_text"][-1])
+    pipe = pipeline("text-classification", model="cardiffnlp/twitter-roberta-base-sentiment-latest")
+    result = pipe(text)
+    return result[0]
 
 
 @app.event("message")
@@ -159,10 +146,13 @@ def handle_message(event, say):
     for mentioned_user in mentioned_users:
         if mentioned_user != user:
         # sends message in slac
-            post_message_to_slack(channel, f"<@{user}> gave kudos to <@{mentioned_user}>")
-            add_points(user_kudos, mentioned_user, 2)
-            add_points(user_given_kudos, user, 1)
-            post_message_to_slack(channel, f"<@{mentioned_user}> has received {user_kudos[mentioned_user]}, <@{user}> has given {user_given_kudos[user]}")
+            result = check_kudos(event)
+            print(f"Positivity score: {result}")
+            if (result['label'] == 'positive') and (result['score'] >= .95):
+                add_points(user_kudos, mentioned_user, 2)
+                add_points(user_given_kudos, user, 1)
+                post_message_to_slack(channel, f"<@{user}> gave kudos to <@{mentioned_user}>")
+                post_message_to_slack(channel, f"<@{mentioned_user}> has received {user_kudos[mentioned_user]}, <@{user}> has given {user_given_kudos[user]}")
 
         else:
             post_message_to_slack(channel, f"Nice try <@{user}>, but you can't give kudos to yourself!")
